@@ -9,6 +9,7 @@ class ViewController: UIViewController {
     private let videoDataOutput = AVCaptureVideoDataOutput()
     private var faceLayers: [CAShapeLayer] = []
     private var currentRollAngle: CGFloat = 0
+    private var currentYawAngle: CGFloat = 0
     private var selectedImage: UIImage?
     
     override func viewDidLoad() {
@@ -170,23 +171,33 @@ extension ViewController: AVCaptureVideoDataOutputSampleBufferDelegate {
                 // Calculate the angle difference from the previous frame
                 let angleDiff = CGFloat(rollAngle) - self.currentRollAngle
                 self.currentRollAngle = CGFloat(rollAngle)
-                
+
                 // Apply the angle difference to the faceLayer
                 let transform = CATransform3DRotate(faceLayer.transform, -angleDiff, 0, 0, 1)
                 faceLayer.transform = transform
             }
-            
+
+            if let yawAngle = observation.yaw {
+                self.currentYawAngle = CGFloat(truncating: yawAngle)
+            }
+
             // FACE LANDMARKS
             if let landmarks = observation.landmarks {
                 if let nose = landmarks.nose {
-                    self.handleLandmark(nose, faceBoundingBox: faceRectConverted, rollAngle: self.currentRollAngle)
+                    self.handleLandmark(nose,
+                                       faceBoundingBox: faceRectConverted,
+                                       rollAngle: self.currentRollAngle,
+                                       yawAngle: self.currentYawAngle)
                 }
             }
         }
     }
 
 
-    private func handleLandmark(_ nose: VNFaceLandmarkRegion2D, faceBoundingBox: CGRect, rollAngle: CGFloat) {
+    private func handleLandmark(_ nose: VNFaceLandmarkRegion2D,
+                               faceBoundingBox: CGRect,
+                               rollAngle: CGFloat,
+                               yawAngle: CGFloat) {
         let landmarkPath = CGMutablePath()
         let landmarkPathPoints = nose.normalizedPoints
             .map({ nosePoint in
@@ -208,11 +219,15 @@ extension ViewController: AVCaptureVideoDataOutputSampleBufferDelegate {
             imageLayer.contents = image.cgImage
             imageLayer.contentsGravity = .resizeAspect
             landmarkLayer.addSublayer(imageLayer)
-            
+
             CATransaction.begin()
             CATransaction.setAnimationDuration(0.1) // Set the animation duration to 200ms (adjust as desired)
             CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: .linear)) // Use a linear animation timing function
-            imageLayer.transform = CATransform3DMakeRotation(-rollAngle, 0, 0, 1) // Apply the roll angle with the animation
+            var transform = CATransform3DIdentity
+            transform.m34 = -1 / 500
+            transform = CATransform3DRotate(transform, -yawAngle, 0, 1, 0)
+            transform = CATransform3DRotate(transform, -rollAngle, 0, 0, 1)
+            imageLayer.transform = transform // Apply both roll and yaw
             CATransaction.commit()
         }
     }
